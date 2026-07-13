@@ -33,8 +33,7 @@ a{color:inherit}
    repeating-linear-gradient(90deg, transparent 0 14px, var(--room2) 14px 24px);
   border-bottom:1px solid var(--room-line);opacity:.7}
 
-header{position:sticky;top:0;z-index:40;background:linear-gradient(var(--room),rgba(21,21,15,.94));
-  backdrop-filter:blur(6px);border-bottom:1px solid var(--room-line)}
+header{background:transparent}
 .head-in{max-width:1180px;margin:0 auto;padding:14px 20px 12px;display:flex;flex-wrap:wrap;gap:12px 18px;align-items:flex-end}
 .brand{display:flex;flex-direction:column;line-height:1}
 .eyebrow{font-family:"Courier Prime",monospace;font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:var(--teal)}
@@ -47,7 +46,7 @@ header{position:sticky;top:0;z-index:40;background:linear-gradient(var(--room),r
 .counter .lbl{font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:#8f866f}
 
 /* toolbar */
-.toolbar{position:sticky;top:0;z-index:30}
+.toolbar{}
 .tb-in{max-width:1180px;margin:0 auto;padding:12px 20px;display:flex;flex-direction:column;gap:10px}
 .tb-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .search{position:relative;flex:1 1 280px;min-width:220px}
@@ -143,7 +142,8 @@ footer{max-width:1180px;margin:0 auto;padding:24px 20px 60px;color:#6f6858;font-
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto}}
 
-.pill{font-family:"Courier Prime",monospace;font-size:11px;letter-spacing:.03em;padding:4px 10px;border-radius:999px;border:1px solid var(--room-line);color:#b9b0a0}
+.topbar{position:sticky;top:0;z-index:40;background:var(--room);border-bottom:1px solid var(--room-line);box-shadow:0 10px 22px -14px rgba(0,0,0,.85)}
+.pill{font-family:"Courier Prime",monospace;font-size:11px;letter-spacing:.03em;padding:5px 11px;border-radius:999px;border:1px solid var(--room-line);color:#b9b0a0;white-space:nowrap;align-self:center}
 .pill.live{color:#1a2b1f;background:var(--teal);border-color:var(--teal);font-weight:700}
 .pill.load{color:var(--amber);border-color:var(--amber-deep)}
 .pill.local{color:#8f866f}
@@ -173,6 +173,7 @@ footer{max-width:1180px;margin:0 auto;padding:24px 20px 60px;color:#6f6858;font-
 </head>
 <body>
 <div class="sprockets"></div>
+<div class="topbar">
 <header>
   <div class="head-in">
     <div class="brand">
@@ -204,14 +205,16 @@ footer{max-width:1180px;margin:0 auto;padding:24px 20px 60px;color:#6f6858;font-
       <button class="btn" id="addBtn">➕ Agregar</button>
       <button class="btn" id="statsBtn">Estadísticas</button>
       <button class="btn btn-amber" id="surprise">🎞 Función sorpresa</button>
+      <span class="pill local" id="pill">● Local</span>
     </div>
     <div class="tb-row">
       <div class="chips" id="decades"></div>
-      <span class="pill local" id="pill">● Local</span>
       <span class="tb-meta"><b id="shown">0</b> resultados</span>
     </div>
   </div>
 </div>
+
+</div><!--/topbar-->
 
 <div class="stats" id="stats"><div class="stats-in"><div class="stats-grid" id="statsGrid"></div></div></div>
 
@@ -302,24 +305,41 @@ function normalizeList(raw){
 const byId = id => DATA.find(e=>e.id===String(id));
 const imdbUrl = e => `https://www.imdb.com/find/?q=${encodeURIComponent((e.t+(e.y?' '+e.y:'')).trim())}&s=tt`;
 
-// Abre directo la ficha del mejor resultado usando la API de autocompletado de IMDb.
-// Abre la pestaña YA (dentro del gesto de click) y la redirige al llegar la respuesta.
+// Busca el ID de IMDb probando varios endpoints de autocompletado (uno suele
+// estar disponible aunque un bloqueador corte otro). Devuelve la lista de títulos.
+async function imdbLookup(t){
+  const clean=(t||'').trim();
+  const first=(clean.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]/g,'').charAt(0)||'x').toLowerCase();
+  const q=encodeURIComponent(clean);
+  const urls=[
+    `https://v3.sg.media-imdb.com/suggestion/${first}/${q}.json?includeVideos=0`,
+    `https://v2.sg.media-imdb.com/suggestion/${first}/${q}.json`,
+    `https://sg.media-imdb.com/suggests/${first}/${q}.json`
+  ];
+  for(const u of urls){
+    try{
+      const r=await fetch(u); if(!r.ok) continue;
+      const txt=await r.text();
+      const m=txt.match(/^[^(]*\((.*)\)\s*;?\s*$/s);          // el 3º endpoint viene como JSONP
+      const j=JSON.parse(m?m[1]:txt);
+      const items=(j.d||[]).filter(x=>typeof x.id==='string'&&x.id.slice(0,2)==='tt');
+      if(items.length) return items;
+    }catch(_){}
+  }
+  return null;
+}
+// Abre la pestaña YA (dentro del gesto de click) y la redirige al mejor resultado.
 async function openImdb(e, ev){
   if(ev) ev.preventDefault();
-  const win = window.open('about:blank','_blank');
-  try{
-    const t=(e.t||'').trim();
-    const first = norm(t).replace(/[^a-z0-9]/g,'').charAt(0) || 'x';
-    const r = await fetch(`https://v3.sg.media-imdb.com/suggestion/${first}/${encodeURIComponent(t)}.json?includeVideos=0`);
-    const j = await r.json();
-    const items = (j.d||[]).filter(x=> typeof x.id==='string' && x.id.slice(0,2)==='tt');
-    let pick = items[0];
-    if(e.y){ const exact=items.find(x=>x.y===e.y) || items.find(x=>Math.abs((x.y||0)-e.y)<=1); if(exact) pick=exact; }
-    if(!pick) throw 0;
-    if(win) win.location.href=`https://www.imdb.com/title/${pick.id}/`;
-    else window.open(`https://www.imdb.com/title/${pick.id}/`,'_blank');
-  }catch(_){
-    if(win) win.location.href=imdbUrl(e); else window.open(imdbUrl(e),'_blank');
+  const win=window.open('about:blank','_blank');
+  const go=u=>{ if(win) win.location.href=u; else window.open(u,'_blank'); };
+  const items=await imdbLookup(e.t);
+  if(items){
+    let pick=items[0];
+    if(e.y){ const m=items.find(x=>x.y===e.y)||items.find(x=>Math.abs((x.y||0)-e.y)<=1); if(m)pick=m; }
+    go(`https://www.imdb.com/title/${pick.id}/`);
+  }else{
+    go(imdbUrl(e));   // fallback: página de búsqueda
   }
 }
 document.addEventListener('click',ev=>{
