@@ -148,12 +148,14 @@ footer{max-width:1180px;margin:0 auto;padding:24px 20px 60px;color:#6f6858;font-
 .pill.load{color:var(--amber);border-color:var(--amber-deep)}
 .pill.local{color:#8f866f}
 .cardfoot{display:flex;align-items:flex-end;justify-content:space-between;gap:10px}
-.cardacts{display:flex;gap:5px;flex:none;opacity:.35;transition:opacity .12s}
+.cardacts{display:flex;gap:5px;flex:none;align-items:center;opacity:.4;transition:opacity .12s}
 .card:hover .cardacts,.card:focus-within .cardacts{opacity:1}
 .ca{border:1px solid var(--line);background:rgba(255,255,255,.55);color:var(--ink-soft);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:13px;line-height:1;display:flex;align-items:center;justify-content:center;transition:.12s}
 .ca:hover{border-color:var(--amber-deep);color:var(--amber-deep);background:#fff}
 .ca[data-act=del]:hover{border-color:#b23a2e;color:#b23a2e}
-@media (hover:none){.cardacts{opacity:.8}}
+.imdb{display:inline-flex;align-items:center;height:28px;padding:0 9px;border-radius:6px;border:1px solid #d9b400;background:#f5c518;color:#151515;font-family:"Courier Prime",monospace;font-weight:700;font-size:11px;letter-spacing:.02em;text-decoration:none;transition:.12s;cursor:pointer}
+.imdb:hover{background:#ffd633;border-color:#c8a600}
+@media (hover:none){.cardacts{opacity:.85}}
 .reel.form{text-align:left}
 .reel.form h2{text-align:left;font-size:22px;margin-top:2px}
 .field{margin:12px 0}
@@ -166,6 +168,7 @@ footer{max-width:1180px;margin:0 auto;padding:24px 20px 60px;color:#6f6858;font-
 .msg.ok{color:#2f7d52}.msg.err{color:#b23a2e}
 .noapi{color:var(--ink-soft);font-size:14px;line-height:1.5}
 .noapi code{background:#00000010;padding:1px 5px;border-radius:4px;font-size:12px}
+.reel .locs{align-items:center}
 </style>
 </head>
 <body>
@@ -297,6 +300,32 @@ function normalizeList(raw){
   })).filter(e=>e.t);
 }
 const byId = id => DATA.find(e=>e.id===String(id));
+const imdbUrl = e => `https://www.imdb.com/find/?q=${encodeURIComponent((e.t+(e.y?' '+e.y:'')).trim())}&s=tt`;
+
+// Abre directo la ficha del mejor resultado usando la API de autocompletado de IMDb.
+// Abre la pestaña YA (dentro del gesto de click) y la redirige al llegar la respuesta.
+async function openImdb(e, ev){
+  if(ev) ev.preventDefault();
+  const win = window.open('about:blank','_blank');
+  try{
+    const t=(e.t||'').trim();
+    const first = norm(t).replace(/[^a-z0-9]/g,'').charAt(0) || 'x';
+    const r = await fetch(`https://v3.sg.media-imdb.com/suggestion/${first}/${encodeURIComponent(t)}.json?includeVideos=0`);
+    const j = await r.json();
+    const items = (j.d||[]).filter(x=> typeof x.id==='string' && x.id.slice(0,2)==='tt');
+    let pick = items[0];
+    if(e.y){ const exact=items.find(x=>x.y===e.y) || items.find(x=>Math.abs((x.y||0)-e.y)<=1); if(exact) pick=exact; }
+    if(!pick) throw 0;
+    if(win) win.location.href=`https://www.imdb.com/title/${pick.id}/`;
+    else window.open(`https://www.imdb.com/title/${pick.id}/`,'_blank');
+  }catch(_){
+    if(win) win.location.href=imdbUrl(e); else window.open(imdbUrl(e),'_blank');
+  }
+}
+document.addEventListener('click',ev=>{
+  const im=ev.target.closest('.imdb'); if(!im) return;
+  openImdb({ t:im.dataset.t||'', y:im.dataset.y? +im.dataset.y : null }, ev);
+});
 
 /* ---- facetas ---- */
 function buildFacets(){
@@ -357,8 +386,10 @@ function hl(s){
 }
 function cardHTML(e){
   const locs=(e.l||[]).map(l=>`<span class="loc" data-l="${esc(l)}">${esc(l)}</span>`).join('');
-  const acts = (LIVE && e.id!=null)
-    ? `<div class="cardacts"><button class="ca" data-act="edit" title="Editar">✎</button><button class="ca" data-act="del" title="Borrar">🗑</button></div>` : '';
+  const imdb=`<a class="imdb" href="${imdbUrl(e)}" target="_blank" rel="noopener" data-t="${esc(e.t)}" data-y="${e.y||''}" title="Abrir en IMDb">IMDb</a>`;
+  const crud=(LIVE && e.id!=null)
+    ? `<button class="ca" data-act="edit" title="Editar">✎</button><button class="ca" data-act="del" title="Borrar">🗑</button>` : '';
+  const acts=`<div class="cardacts">${imdb}${crud}</div>`;
   return `<article class="card" data-id="${esc(e.id||'')}">
     <div class="top"><span class="yr ${e.y?'':'none'}">${e.y||'s/f'}</span><span class="fmt">${esc((e.m||[]).join(' · '))}</span></div>
     <h3>${hl(e.t)}</h3>
@@ -422,7 +453,8 @@ function rollReel(){
   $('#rTitle').textContent=e.t;
   $('#rYear').textContent=(e.y||'año s/d')+(e.m&&e.m.length? ' · '+e.m.join(' · '):'');
   $('#rDet').textContent=e.d||'';
-  $('#rLoc').innerHTML=(e.l||[]).map(l=>`<span class="loc">${esc(l)}</span>`).join('');
+  $('#rLoc').innerHTML=(e.l||[]).map(l=>`<span class="loc">${esc(l)}</span>`).join('')
+    +`<a class="imdb" href="${imdbUrl(e)}" target="_blank" rel="noopener" data-t="${esc(e.t)}" data-y="${e.y||''}" title="Abrir en IMDb">IMDb</a>`;
   $('#overlay').classList.add('on');
 }
 function closeReel(){ $('#overlay').classList.remove('on'); }
