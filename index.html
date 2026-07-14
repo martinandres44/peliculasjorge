@@ -143,7 +143,10 @@ footer{max-width:1180px;margin:0 auto;padding:24px 20px 60px;color:#6f6858;font-
 @media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto}}
 
 .topbar{position:sticky;top:0;z-index:40;background:var(--room);border-bottom:1px solid var(--room-line);box-shadow:0 10px 22px -14px rgba(0,0,0,.85)}
-.pill{font-family:"Courier Prime",monospace;font-size:11px;letter-spacing:.03em;padding:5px 11px;border-radius:999px;border:1px solid var(--room-line);color:#b9b0a0;white-space:nowrap;align-self:center}
+.hdr-right{margin-left:auto;display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:flex-end}
+.counter{margin-left:0;display:flex;flex-direction:column;align-items:flex-end}
+.counter .pill{margin-top:9px}
+.pill{font-family:"Courier Prime",monospace;font-size:11px;letter-spacing:.03em;padding:5px 11px;border-radius:999px;border:1px solid var(--room-line);color:#b9b0a0;white-space:nowrap}
 .pill.live{color:#1a2b1f;background:var(--teal);border-color:var(--teal);font-weight:700}
 .pill.load{color:var(--amber);border-color:var(--amber-deep)}
 .pill.local{color:#8f866f}
@@ -156,6 +159,7 @@ footer{max-width:1180px;margin:0 auto;padding:24px 20px 60px;color:#6f6858;font-
 .imdb{display:inline-flex;align-items:center;height:28px;padding:0 9px;border-radius:6px;border:1px solid #d9b400;background:#f5c518;color:#151515;font-family:"Courier Prime",monospace;font-weight:700;font-size:11px;letter-spacing:.02em;text-decoration:none;transition:.12s;cursor:pointer}
 .imdb:hover{background:#ffd633;border-color:#c8a600}
 @media (hover:none){.cardacts{opacity:.85}}
+@media (max-width:560px){.hdr-right{margin-left:0;justify-content:flex-start}.counter{align-items:flex-start}}
 .reel.form{text-align:left}
 .reel.form h2{text-align:left;font-size:22px;margin-top:2px}
 .field{margin:12px 0}
@@ -181,9 +185,13 @@ footer{max-width:1180px;margin:0 auto;padding:24px 20px 60px;color:#6f6858;font-
       <span class="wordmark">CINE<b>MATECA</b></span>
       <span class="owner" id="owner">La colección de Jorge</span>
     </div>
-    <div class="counter">
-      <span class="num" id="total">0</span>
-      <span class="lbl">películas catalogadas</span>
+    <div class="hdr-right">
+      <button class="btn btn-amber" id="surprise">🎞 Función sorpresa</button>
+      <div class="counter">
+        <span class="num" id="total">0</span>
+        <span class="lbl">películas catalogadas</span>
+        <span class="pill local" id="pill">● Local</span>
+      </div>
     </div>
   </div>
 </header>
@@ -204,8 +212,6 @@ footer{max-width:1180px;margin:0 auto;padding:24px 20px 60px;color:#6f6858;font-
       <select id="loc" title="Ubicación"><option value="">Toda ubicación</option></select>
       <button class="btn" id="addBtn">➕ Agregar</button>
       <button class="btn" id="statsBtn">Estadísticas</button>
-      <button class="btn btn-amber" id="surprise">🎞 Función sorpresa</button>
-      <span class="pill local" id="pill">● Local</span>
     </div>
     <div class="tb-row">
       <div class="chips" id="decades"></div>
@@ -295,7 +301,7 @@ let locCount = new Map(), decCount = new Map(), minY = 9999, maxY = 0, noYear = 
 const mkSearch = e => norm(`${e.t} ${e.d||''} ${(e.l||[]).join(' ')} ${e.y||''}`);
 function normalizeList(raw){
   return raw.map((e,i)=>({
-    i, id:(e.id!=null?String(e.id):null),
+    i, id:(e.id!=null?String(e.id):null), im:(e.im||''),
     t:(e.t||'').trim(), y:(e.y??null), d:(e.d||'').trim(),
     l:Array.isArray(e.l)?e.l:(e.l?[e.l]:[]),
     m:Array.isArray(e.m)?e.m:(e.m?[e.m]:['Disco']),
@@ -304,6 +310,8 @@ function normalizeList(raw){
 }
 const byId = id => DATA.find(e=>e.id===String(id));
 const imdbUrl = e => `https://www.imdb.com/find/?q=${encodeURIComponent((e.t+(e.y?' '+e.y:'')).trim())}&s=tt`;
+const validImdb = id => /^tt\d+$/.test(id||'');
+const imdbHref = e => validImdb(e.im) ? `https://www.imdb.com/title/${e.im}/` : imdbUrl(e);
 
 // Busca el ID de IMDb probando varios endpoints de autocompletado (uno suele
 // estar disponible aunque un bloqueador corte otro). Devuelve la lista de títulos.
@@ -331,6 +339,7 @@ async function imdbLookup(t){
 // Abre la pestaña YA (dentro del gesto de click) y la redirige al mejor resultado.
 async function openImdb(e, ev){
   if(ev) ev.preventDefault();
+  if(validImdb(e.im)){ window.open(`https://www.imdb.com/title/${e.im}/`,'_blank'); return; }
   const win=window.open('about:blank','_blank');
   const go=u=>{ if(win) win.location.href=u; else window.open(u,'_blank'); };
   const items=await imdbLookup(e.t);
@@ -344,7 +353,7 @@ async function openImdb(e, ev){
 }
 document.addEventListener('click',ev=>{
   const im=ev.target.closest('.imdb'); if(!im) return;
-  openImdb({ t:im.dataset.t||'', y:im.dataset.y? +im.dataset.y : null }, ev);
+  openImdb({ t:im.dataset.t||'', y:im.dataset.y? +im.dataset.y : null, im:im.dataset.im||'' }, ev);
 });
 
 /* ---- facetas ---- */
@@ -406,7 +415,7 @@ function hl(s){
 }
 function cardHTML(e){
   const locs=(e.l||[]).map(l=>`<span class="loc" data-l="${esc(l)}">${esc(l)}</span>`).join('');
-  const imdb=`<a class="imdb" href="${imdbUrl(e)}" target="_blank" rel="noopener" data-t="${esc(e.t)}" data-y="${e.y||''}" title="Abrir en IMDb">IMDb</a>`;
+  const imdb=`<a class="imdb" href="${imdbHref(e)}" target="_blank" rel="noopener" data-t="${esc(e.t)}" data-y="${e.y||''}" data-im="${esc(e.im||'')}" title="Abrir en IMDb">IMDb</a>`;
   const crud=(LIVE && e.id!=null)
     ? `<button class="ca" data-act="edit" title="Editar">✎</button><button class="ca" data-act="del" title="Borrar">🗑</button>` : '';
   const acts=`<div class="cardacts">${imdb}${crud}</div>`;
@@ -474,7 +483,7 @@ function rollReel(){
   $('#rYear').textContent=(e.y||'año s/d')+(e.m&&e.m.length? ' · '+e.m.join(' · '):'');
   $('#rDet').textContent=e.d||'';
   $('#rLoc').innerHTML=(e.l||[]).map(l=>`<span class="loc">${esc(l)}</span>`).join('')
-    +`<a class="imdb" href="${imdbUrl(e)}" target="_blank" rel="noopener" data-t="${esc(e.t)}" data-y="${e.y||''}" title="Abrir en IMDb">IMDb</a>`;
+    +`<a class="imdb" href="${imdbHref(e)}" target="_blank" rel="noopener" data-t="${esc(e.t)}" data-y="${e.y||''}" data-im="${esc(e.im||'')}" title="Abrir en IMDb">IMDb</a>`;
   $('#overlay').classList.add('on');
 }
 function closeReel(){ $('#overlay').classList.remove('on'); }
