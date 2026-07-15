@@ -179,7 +179,15 @@ footer{max-width:1180px;margin:0 auto;padding:24px 20px 60px;color:#6f6858;font-
 .msg.ok{color:#2f7d52}.msg.err{color:#b23a2e}
 .noapi{color:var(--ink-soft);font-size:14px;line-height:1.5}
 .noapi code{background:#00000010;padding:1px 5px;border-radius:4px;font-size:12px}
-.reel .locs{align-items:center}
+#overlay .reel.ticket{padding:26px 62px 26px 28px;border-top:6px solid var(--amber)}
+.reel .stub{position:absolute;top:0;bottom:0;right:0;width:38px;border-left:2px dashed var(--line);
+  display:flex;align-items:center;justify-content:center;
+  font-family:"Courier Prime",monospace;font-size:10px;letter-spacing:.32em;text-transform:uppercase;
+  color:#9a8f6f;writing-mode:vertical-rl;
+  background:repeating-linear-gradient(-45deg,rgba(201,138,34,.08) 0 6px,transparent 6px 12px)}
+.reel h2.rolling{color:#9a8f6f;filter:blur(.6px)}
+.reel .ry{min-height:20px}.reel .rd{min-height:20px}
+.empty svg{display:block;margin:0 auto 16px;opacity:.75}
 </style>
 </head>
 <body>
@@ -236,8 +244,17 @@ footer{max-width:1180px;margin:0 auto;padding:24px 20px 60px;color:#6f6858;font-
   <div class="sentinel" id="sentinel"></div>
   <div class="more" id="more"></div>
   <div class="empty" id="empty" style="display:none">
-    <div class="big">No hay películas con ese criterio</div>
-    <div>Probá con otro título, director o número de caja.</div>
+    <svg width="76" height="76" viewBox="0 0 76 76" fill="none" aria-hidden="true">
+      <circle cx="36" cy="36" r="27" stroke="#a89f8a" stroke-width="3"/>
+      <circle cx="36" cy="36" r="5" fill="#a89f8a"/>
+      <circle cx="36" cy="17" r="6.5" stroke="#a89f8a" stroke-width="2.5"/>
+      <circle cx="36" cy="55" r="6.5" stroke="#a89f8a" stroke-width="2.5"/>
+      <circle cx="17" cy="36" r="6.5" stroke="#a89f8a" stroke-width="2.5"/>
+      <circle cx="55" cy="36" r="6.5" stroke="#a89f8a" stroke-width="2.5"/>
+      <path d="M52 58 Q60 66 72 66" stroke="#a89f8a" stroke-width="3" stroke-linecap="round"/>
+    </svg>
+    <div class="big">Esa no está en el fichero… ¿todavía?</div>
+    <div>Probá con otro título, director o número de caja — o agregala y estrenala en la colección.</div>
     <button class="btn" onclick="resetAll()">Limpiar filtros</button>
   </div>
 </main>
@@ -270,8 +287,9 @@ footer{max-width:1180px;margin:0 auto;padding:24px 20px 60px;color:#6f6858;font-
   </div>
 </div>
 <div class="overlay" id="overlay">
-  <div class="reel">
+  <div class="reel ticket">
     <span class="x" onclick="closeReel()">×</span>
+    <div class="stub" aria-hidden="true">Admit one · Cinemateca</div>
     <div class="k">Función de hoy</div>
     <h2 id="rTitle"></h2>
     <div class="ry" id="rYear"></div>
@@ -489,18 +507,31 @@ function buildStats(){
 }
 $('#statsBtn').onclick=()=>{ const s=$('#stats'); s.classList.toggle('open'); if(s.classList.contains('open')&&!s.dataset.built){ buildStats(); s.dataset.built='1'; } };
 
-/* ---- función sorpresa ---- */
-function rollReel(){
-  const pool=filtered.length? filtered:DATA; if(!pool.length) return;
-  const e=pool[Math.floor(Math.random()*pool.length)];
-  $('#rTitle').textContent=e.t;
+/* ---- función sorpresa: ticket de cine + ruleta ---- */
+let rollTimer=null;
+function showPick(e){
+  const h=$('#rTitle'); h.classList.remove('rolling'); h.textContent=e.t;
   $('#rYear').textContent=(e.y||'año s/d')+(e.m&&e.m.length? ' · '+e.m.join(' · '):'');
   $('#rDet').textContent=e.d||'';
   $('#rLoc').innerHTML=(e.l||[]).map(l=>`<span class="loc">${esc(l)}</span>`).join('')
     +`<a class="imdb" href="${imdbHref(e)}" target="_blank" rel="noopener" data-t="${esc(e.t)}" data-y="${e.y||''}" data-im="${esc(e.im||'')}" title="Abrir en IMDb">IMDb</a>`;
-  $('#overlay').classList.add('on');
 }
-function closeReel(){ $('#overlay').classList.remove('on'); }
+function rollReel(){
+  const pool=filtered.length? filtered:DATA; if(!pool.length) return;
+  $('#overlay').classList.add('on');
+  clearInterval(rollTimer);
+  const pick=()=> pool[Math.floor(Math.random()*pool.length)];
+  if(matchMedia('(prefers-reduced-motion:reduce)').matches){ showPick(pick()); return; }
+  const h=$('#rTitle'); h.classList.add('rolling');
+  $('#rDet').textContent=''; $('#rLoc').innerHTML='';
+  let n=0;
+  rollTimer=setInterval(()=>{
+    const e=pick();
+    h.textContent=e.t; $('#rYear').textContent=e.y||'';
+    if(++n>=11){ clearInterval(rollTimer); showPick(pick()); }
+  },75);
+}
+function closeReel(){ $('#overlay').classList.remove('on'); clearInterval(rollTimer); }
 $('#surprise').onclick=rollReel;
 $('#overlay').addEventListener('click',e=>{ if(e.target.id==='overlay') closeReel(); });
 
