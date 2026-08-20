@@ -907,8 +907,15 @@ function parseDocLine(line, stripLoc){
    (cada renglon del Word es un registro individual: si el mismo titulo se
    repite 3 veces y el fichero ya tiene 2, se agrega 1 sola vez) */
 const IMP_STOP=new Set(['the','el','la','los','las','lo','un','una','unos','unas','der','die','das','il','le','les','de','of']);
+/* palabras que por s\u00ed solas no son un t\u00edtulo: etiquetas de formato/ubicaci\u00f3n
+   gen\u00e9ricas. Sirven para detectar renglones del Word que en realidad son la
+   segunda l\u00ednea de una ficha anterior (el t\u00edtulo qued\u00f3 en el rengl\u00f3n previo
+   y ac\u00e1 solo qued\u00f3 "DVD", "CAJA X", un n\u00famero de caja, etc.) */
+const IMP_GENERIC_LABEL=new Set(['dvd','caja','carpeta','blu','ray','bluray','disco','vhs']);
 function diffAgainstData(lines){
-  const stripLoc=makeLocStripper(DATA.flatMap(e=>e.l||[]));
+  const knownLocs=DATA.flatMap(e=>e.l||[]);
+  const knownLocNK=new Set([...new Set(knownLocs)].map(impNK));
+  const stripLoc=makeLocStripper(knownLocs);
   const recs=DATA.map((e,idx)=>({ idx, tk:impNK(e.t).split(' '), key:impNK(e.t), y:e.y||0, used:false }));
   const byTitleYear=new Map(), byTitle=new Map();
   recs.forEach(r=>{
@@ -949,6 +956,20 @@ function diffAgainstData(lines){
   const grade=p=>{
     if(!p.title || impNK(p.title).length<2) return 'ruido';
     if(!p.locs.length && !p.year && !p.rest) return 'ruido';
+    const tNK=impNK(p.title);
+    // el "t\u00edtulo" es exactamente una ubicaci\u00f3n conocida (CAJA X, DVD, etc.):
+    // es la segunda l\u00ednea de la ficha anterior, no una pel\u00edcula nueva
+    if(knownLocNK.has(tNK)) return 'ruido';
+    // el "t\u00edtulo" es puro a\u00f1o Y no aparece ning\u00fan otro a\u00f1o en el rengl\u00f3n:
+    // el rengl\u00f3n real qued\u00f3 arriba, ac\u00e1 solo sigui\u00f3 el reparto/ubicaci\u00f3n.
+    // (si el a\u00f1o real aparece m\u00e1s adelante en la l\u00ednea, es un t\u00edtulo num\u00e9rico
+    // v\u00e1lido como "1917" o "2046", no se descarta)
+    if(impYEAR.test(p.title.trim()) && p.year==null) return 'ruido';
+    // el "t\u00edtulo" combina una etiqueta gen\u00e9rica (DVD, CAJA, CARPETA) con solo
+    // n\u00fameros (p.ej. "CAJA 5"): es ubicaci\u00f3n, no t\u00edtulo. Un t\u00edtulo puramente
+    // num\u00e9rico sin ninguna etiqueta (p.ej. "360") no se toca.
+    if(tNK.split(' ').some(t=>IMP_GENERIC_LABEL.has(t)) &&
+       tNK.split(' ').every(t=>IMP_GENERIC_LABEL.has(t) || /^\d+$/.test(t))) return 'ruido';
     if(!impUP(p.raw.trim().split(' ')[0])) return 'dudoso';
     if(!p.year && !/[a-z\u00e0-\u00ff]/.test(p.rest||'')) return 'dudoso';
     return 'nueva';
